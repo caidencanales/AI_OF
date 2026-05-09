@@ -1,0 +1,85 @@
+name: Build bm-studio Wan image
+
+# Triggers: manual run from the Actions tab, OR push to main
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Image tag (e.g. v1, v2)'
+        required: true
+        default: 'v1'
+  push:
+    branches: [main]
+    paths:
+      - 'Dockerfile'
+      - 'patch_crt_nodes.py'
+      - '.github/workflows/build.yml'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/bm-studio-wan
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write    # needed to push to GHCR via GITHUB_TOKEN
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # The runner has only ~14 GB free disk after preinstalled tools.
+      # We free another ~25 GB by removing things we don't need for a Docker build.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          df -h
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "value=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "value=v1" >> $GITHUB_OUTPUT
+          fi
+
+      # The big one: Buildx streams layers to a registry-side cache as they're
+      # built, so local disk never has to hold the full 50 GB image. mode=max
+      # caches every layer (including intermediate RUN steps) so subsequent
+      # builds are dramatically faster.
+      - name: Build + push image (with registry cache)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.value }}
+          build-args: |
+            R2_ACCOUNT_ID=${{ secrets.R2_ACCOUNT_ID }}
+            R2_ENDPOINT=${{ secrets.R2_ENDPOINT }}
+            R2_BUCKET_NAME=${{ secrets.R2_BUCKET_NAME }}
+            R2_ACCESS_KEY_ID=${{ secrets.R2_ACCESS_KEY_ID }}
+            R2_SECRET_ACCESS_KEY=${{ secrets.R2_SECRET_ACCESS_KEY }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+          provenance: false   # smaller image, no SBOM bloat
+
+      - name: Report image digest
+        run: |
+          echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.value }}"
+          echo "Pushed at: $(date -u)"
