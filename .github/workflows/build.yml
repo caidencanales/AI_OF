@@ -69,12 +69,9 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.value }}
-          build-args: |
-            R2_ACCOUNT_ID=${{ secrets.R2_ACCOUNT_ID }}
-            R2_ENDPOINT=${{ secrets.R2_ENDPOINT }}
-            R2_BUCKET_NAME=${{ secrets.R2_BUCKET_NAME }}
-            R2_ACCESS_KEY_ID=${{ secrets.R2_ACCESS_KEY_ID }}
-            R2_SECRET_ACCESS_KEY=${{ secrets.R2_SECRET_ACCESS_KEY }}
+          # Slim image — no model bake, no R2 build-args needed.
+          # Models come from the network volume mounted at /runpod-volume on the
+          # serverless endpoint (see _system/docker/github-actions-build/README.md).
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
           cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
           provenance: false   # smaller image, no SBOM bloat
