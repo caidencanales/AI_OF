@@ -42,6 +42,8 @@ RUN git clone https://github.com/kijai/ComfyUI-WanVideoWrapper.git \
     && git clone https://github.com/yolain/ComfyUI-Easy-Use.git \
     && git clone https://github.com/PGCRT/CRT-Nodes.git crt-nodes \
     && git clone https://github.com/rgthree/rgthree-comfy.git \
+    && git clone https://github.com/evanspearman/ComfyMath.git \
+    && git clone https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git \
     && find . -maxdepth 2 -name '.git' -type d -exec rm -rf {} + 2>/dev/null || true
 
 # === Layer 3: patch crt-nodes LTX23 imports (gate the broken import) ===
