@@ -48,6 +48,42 @@ RUN git clone https://github.com/kijai/ComfyUI-WanVideoWrapper.git \
 COPY patch_crt_nodes.py /tmp/patch_crt_nodes.py
 RUN python3 /tmp/patch_crt_nodes.py && rm /tmp/patch_crt_nodes.py
 
+# === Layer 3b: install custom-node Python deps ===
+# The 5.5.0-base image is missing cv2, accelerate, etc. that several custom nodes
+# need (WanVideoWrapper, WanAnimatePreprocess, KJNodes, VideoHelperSuite, etc).
+# We explicitly install the superset; that's faster + more reliable than running
+# each requirements.txt and dramatically smaller than re-resolving torch deps.
+RUN pip install --no-cache-dir \
+        opencv-python-headless \
+        accelerate \
+        diffusers \
+        transformers \
+        einops \
+        onnxruntime \
+        onnxruntime-gpu \
+        imageio-ffmpeg \
+        decord \
+        scikit-image \
+        scipy \
+        kornia \
+        sentencepiece \
+        numba \
+        omegaconf \
+        peft \
+        ftfy \
+        regex \
+        protobuf
+
+# Then run each custom node's requirements.txt (filling in anything we missed).
+# Some installs may fail (compile-from-source on certain optional deps); we
+# tolerate failures so the build doesn't crash on a single optional package.
+RUN for d in /comfyui/custom_nodes/*/; do \
+        if [ -f "$d/requirements.txt" ]; then \
+            echo "=== installing $d/requirements.txt ==="; \
+            pip install --no-cache-dir -r "$d/requirements.txt" || echo "  (some deps failed for $d, continuing)"; \
+        fi; \
+    done
+
 LABEL org.bm-studio.image="wan-animate-slim-no-models"
 LABEL org.bm-studio.built="2026-05-09"
 LABEL org.bm-studio.wan-sha="e4e7f41"
